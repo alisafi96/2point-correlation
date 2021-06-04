@@ -9,17 +9,17 @@ mtexdata titanium;
 
 %% Building the source Wigner D matrix to construct Fourier coefficients
 
-ori = ebsd(1:100).orientations;
-bandwidth = 20;
+ori = ebsd(1:1000).orientations;
+bandwidth = 10;
 
 C = sum(conj(WignerD(ori, 'bandwidth', bandwidth)),2);
-C = C/length(ori);
+C = C./length(ori);
 
 %% Evaluation of ODF (equation 4.21) 
 
 % Wigner D of orientation of interest
 % Evaluate for random orientation
-D_g = WignerD(ebsd.orientations(20), 'bandwidth', bandwidth);
+D_g = WignerD(ebsd.orientations(5000), 'bandwidth', bandwidth);
 
 l = 0:bandwidth;
 d = (2*l+1).^2;
