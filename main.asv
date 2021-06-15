@@ -1,25 +1,90 @@
 %% Import data
 mtexdata titanium;
 
-%% Calculate WignerD/GSH functions
+%% Building the source Wigner D matrix to construct Fourier coefficients
+
+% Define set of orientations & bandwidth
+ori = ebsd.orientations;
+bandwidth = 25;
+
+C = sum(conj(WignerD(ori, 'bandwidth', bandwidth)),2);
+C = C/length(ori);
+
+%% Calculate and compare odfs
 
 %odf_kernel = calcKernelODF(ebsd.orientations,'halfwidth',10*degree);
 
-%odf_psi = calcDensity(ebsd.orientations,'kernel',psi);
+% Harmoic expansion of the unimodal odf
+odf = calcDensity(ori,'Fourier','bandwidth', bandwidth);
 
-%% Building the source Wigner D matrix to construct Fourier coefficients
+% Direct calculation
+odf_C = FourierODF(C,ori.CS);
 
-ori = ebsd(1:1000).orientations;
-bandwidth = 10;
 
-C = sum(conj(WignerD(ori, 'bandwidth', bandwidth)),2);
-C = C./length(ori);
+%% Evaluate Fourier coefficients
+figure
+plotFourier(odf, 'bandwidth', bandwidth)
 
-%% Evaluation of ODF (equation 4.21) 
+figure
+plotFourier(odf_C, 'bandwidth', bandwidth)
+
+
+
+%% Evaluating odfs using pole figure plots
+
+h = { ...
+  Miller(0,0,0,2,ori.CS),...
+  Miller(1,0,-1,0,ori.CS),...
+  Miller(1,0,-1,1,ori.CS),...
+  Miller(1,0,-1,2,ori.CS),...
+  };
+
+figure
+plotPDF(odf,h);
+
+mtexColorbar
+CLim(gcm,[0.0,2])
+
+figure
+plotPDF(odf_C,h);
+
+mtexColorbar
+CLim(gcm,[0.0,2])
+
+
+%% Calculate Misorientations
+
+% Uncorrelated mdfs
+mdf = calcMDF(odf, 'bandwidth', bandwidth);
+mdf_C = calcMDF(odf_C);
+
+
+figure
+plotAxisDistribution(mdf)
+figure
+plotAxisDistribution(mdf_C)
+%% Calculate correlated MDF
+
+%grains = calcGrains(ebsd,'angle',10*degree);
+
+% Find grain boundary misorientation
+mori = grains.boundary('Titanium (Alpha)','Titanium (Alpha)').misorientation;
+
+mdf_correlated  = calcMDF(mori);
+figure
+plotAxisDistribution(mdf_correlated);
+
+C_mori = sum(conj(WignerD(ori, 'bandwidth', bandwidth)),2);
+C_mori = C/length(ori);
+
+
+%% Evaluation of ODF for a single orientation (can be replaced by MTEX function)
+
+
 
 % Wigner D of orientation of interest
 % Evaluate for random orientation
-D_g = WignerD(ebsd.orientations(5000), 'bandwidth', bandwidth);
+D_g = WignerD(ebsd.orientations(20), 'bandwidth', bandwidth);
 
 l = 0:bandwidth;
 d = (2*l+1).^2;
