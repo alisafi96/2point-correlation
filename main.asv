@@ -1,106 +1,151 @@
-%% Import data
-mtexdata titanium;
+%% Calculation of MDF for given dx
+ebsd_grid = ebsd.gridify;
 
-%% Building the source Wigner D matrix to construct Fourier coefficients
+%% Sampling algorithm
 
-% Define set of orientations & bandwidth
-ori = ebsd.orientations;
-bandwidth = 25;
+% define set of correlation vectors in pixels
 
-C = sum(conj(WignerD(ori, 'bandwidth', bandwidth)),2);
-C = C/length(ori);
+dX = -1:1;
+dY = -1:1;
 
-%% Calculate and compare odfs
+% Create object to store the spatially correlated mdf
+resolved_mdf = cell(length(dX)*length(dY),3);
 
-%odf_kernel = calcKernelODF(ebsd.orientations,'halfwidth',10*degree);
+nsamples = round(0.25*length(ebsd_grid));
 
-% Harmoic expansion of the unimodal odf
-odf = calcDensity(ori,'Fourier','bandwidth', bandwidth);
+[max_x,max_y] = size(ebsd_grid);
 
-% Direct calculation
-odf_C = FourierODF(C,ori.CS);
-
-
-%% Evaluate Fourier coefficients
-figure
-plotFourier(odf, 'bandwidth', bandwidth)
-
-figure
-plotFourier(odf_C, 'bandwidth', bandwidth)
-
-
-
-%% Evaluating odfs using pole figure plots
-
-h = { ...
-  Miller(0,0,0,2,ori.CS),...
-  Miller(1,0,-1,0,ori.CS),...
-  Miller(1,0,-1,1,ori.CS),...
-  Miller(1,0,-1,2,ori.CS),...
-  };
-
-figure
-plotPDF(odf,h);
-
-mtexColorbar
-CLim(gcm,[0.0,2])
-
-figure
-plotPDF(odf_C,h);
-
-mtexColorbar
-CLim(gcm,[0.0,2])
-
-
-%% Calculate Misorientations
-
-% Uncorrelated mdfs
-mdf = calcMDF(odf, 'bandwidth', bandwidth);
-mdf_C = calcMDF(odf_C);
-
-
-figure
-plotAxisDistribution(mdf)
-figure
-plotAxisDistribution(mdf_C)
-%% Calculate correlated MDF
-
-%grains = calcGrains(ebsd,'angle',10*degree);
-
-% Find grain boundary misorientation
-mori = grains.boundary('Titanium (Alpha)','Titanium (Alpha)').misorientation;
-
-mdf_correlated  = calcMDF(mori);
-figure
-plotAxisDistribution(mdf_correlated);
-
-C_mori = sum(conj(WignerD(ori, 'bandwidth', bandwidth)),2);
-C_mori = C/length(ori);
-
-
-%% Evaluation of ODF for a single orientation (can be replaced by MTEX function)
-
-
-
-% Wigner D of orientation of interest
-% Evaluate for random orientation
-D_g = WignerD(ebsd.orientations(20), 'bandwidth', bandwidth);
-
-l = 0:bandwidth;
-d = (2*l+1).^2;
-cs = [0 cumsum(d)];
-
-ODF_sum = 0;
-
-for i = 1:length(C)
+element = 0;
+error_counter = 0;
     
-    % Check which l is currently evaluated
-    if ismember(i, cs)
-        [~,l] = ismember(i, cs);
-        l = l-2;
-    end
+   
+for dy = 1:length(dY)
+        
+        for dx = 1:length(dX)
+            element = element + 1;
+% Create random set of samples
+sampleset = sort(randperm(length(ebsd_grid),nsamples));
+X = floor(sampleset ./ max_y)+1;
+Y = rem(sampleset,max_y)+1;
+
+%i = (x-1)*max_y + y;
+% initialization to get a dummy ori object
+ori_tail = ebsd_grid(1:length(sampleset)).orientations;
+ori_head = ebsd_grid(1:length(sampleset)).orientations;
+
+for i = 1:length(X)
+       
+        % current coordinates
+        x = X(i);
+        y = Y(i);
     
-    element = (2*l+1) * C(i) * D_g(i);
-    
-    ODF_sum = ODF_sum + element;
+        try
+        
+        ori_tail(i) = ebsd_grid(x,y).orientations;
+
+        %Case 1
+        if dX(dx) < 0 && dY(dy) < 0
+            if x + dX(dx) < 1 && y + dY(dy) < 1
+                xdx = x + dX(dx) + max_x;
+                ydy = y + dY(dy) + max_y;
+            elseif x + dX(dx) < 1
+                xdx = x + dX(dx) + max_x;
+                ydy = y + dY(dy);
+            elseif y + dy < 1
+                xdx = x + dX(dx);
+                ydy = y + dY(dy) + max_y;
+            else
+                xdx = x + dX(dx);
+                ydy = y + dY(dy);
+            end
+        end
+        
+        % Case 2
+        if dX(dx) < 0 && dY(dy) >= 0
+            if x + dX(dx) < 1 && y + dY(dy) > max_y
+                xdx = x + dX(dx) + max_x;
+                ydy = dY(dy) - (max_y - y);
+            elseif x + dX(dx) < 1
+                xdx = x + dX(dx) + max_x;
+                ydy = y + dY(dy);
+            elseif y + dy > max_y
+                xdx = x + dX(dx);
+                ydy = dY(dy) - (max_y - y);
+            else
+                xdx = x + dX(dx);
+                ydy = y + dY(dy);
+            end   
+        end
+        
+        % Case 3
+        if dX(dx) >= 0  && dY(dy) < 0
+            if x + dX(dx) > max_x && y + dY(dy) < 1
+                xdx = dX(dx) - (max_x - x);
+                ydy = y + dY(dy) + max_y;
+            elseif x + dX(dx) > max_x
+                xdx = dX(dx) - (max_x - x);
+                ydy = y + dY(dy);
+            elseif y + dy < 1
+                xdx = x + dX(dx);
+                ydy = y + dY(dy) + max_y;
+            else
+                xdx = x + dX(dx);
+                ydy = y + dY(dy);
+            end 
+        end
+        
+        % Case 4
+        if dX(dx) >= 0 && dY(dy) >= 0
+            if x + dx > max_x && y + dy > max_y
+                xdx = dX(dx) - (max_x - x);
+                ydy = dY(dy) - (max_y - y);
+            elseif x + dx > max_x
+                xdx = dX(dx) - (max_x - x);
+                ydy = y + dY(dy);
+            elseif y + dy > max_y
+                xdx = x + dX(dx);
+                ydy = dY(dy) - (max_y - y);
+            else
+                xdx = x + dX(dx);
+                ydy = y + dY(dy);
+            end   
+        end
+        
+        
+        ori_head(i) = ebsd_grid(xdx, ydy).orientations;
+        
+        % if one of the elements are not indexed, remove them
+        catch
+            
+            error_counter = error_counter + 1;
+            ori_tail(i) = 0;
+            ori_head(i) = 0;
+      
+        end
+        
+        if length(ori_tail) < 50
+      
+            disp(i)
+  
+        end
+        
+        
+end
+% remove 
+condition = ori_tail.phi1 == 0 & ori_tail.Phi == 0 & ori_tail.phi2 == 0;
+ori_head(condition) = [];
+ori_tail(condition) = [];
+
+mori = inv(ori_tail) .* ori_head;
+
+% mdf = calcDensity(mori,'exact','Fourier');
+mdf = calcDensity(mori,'order',16);
+
+resolved_mdf{element, 1} = dX(dx);
+resolved_mdf{element, 2} = dY(dy);
+resolved_mdf{element, 3} = mdf;
+        
+
+
+        end
 end
